@@ -18,7 +18,7 @@ interface Props {
   onWild: () => void;
 }
 
-function getCellType(row: number, col: number): 'center' | 'valid' | 'corner' | 'inner' {
+function getCellType(row: number, col: number): 'center' | 'valid' | 'inner' {
   const key = `${row},${col}`;
   if (CENTER_CELLS.has(key)) return 'center';
   if (VALID_PLACEMENT_CELLS.has(key)) return 'valid';
@@ -37,26 +37,24 @@ export default function BattleBoard({
   onPass,
   onWild,
 }: Props) {
-  const { width } = useWindowDimensions();
-  // Board takes up most of the width, leaving room for side buttons
-  const boardSize = Math.min(width - 60, 300);
+  const { width, height } = useWindowDimensions();
+  // Board fills available space — constrained to square
+  const maxBoard = Math.min(width - 56, height * 0.52, 340);
+  const boardSize = Math.floor(maxBoard);
   const cellSize = Math.floor(boardSize / 5);
-  const cardSize = cellSize - 6;
+  const cardFits = cellSize - 6;
 
   const highlightedCells = new Set<string>();
   if (lastHandResult) {
     lastHandResult.cells.forEach(([r, c]) => highlightedCells.add(`${r},${c}`));
   }
 
-  // Determine valid tap targets for current selection state
   const validTapTargets = new Set<string>();
   if (isPlayerTurn && !lastHandResult) {
     if (pendingPlacement) {
-      // Only the opposite cell is valid
       const opp = getOppositeCell(pendingPlacement.row, pendingPlacement.col);
       if (opp) validTapTargets.add(`${opp[0]},${opp[1]}`);
     } else if (selectedCards.length > 0) {
-      // All valid empty placement cells
       for (const key of VALID_PLACEMENT_CELLS) {
         const [r, c] = key.split(',').map(Number);
         if (grid[r][c] === null) {
@@ -71,7 +69,6 @@ export default function BattleBoard({
 
   return (
     <View style={styles.wrapper}>
-      {/* Main board grid */}
       <View style={[styles.board, { width: boardSize, height: boardSize }]}>
         {grid.map((row, r) =>
           row.map((cell, c) => {
@@ -81,6 +78,12 @@ export default function BattleBoard({
             const isValidTarget = validTapTargets.has(key);
             const isPending = pendingPlacement?.row === r && pendingPlacement?.col === c;
             const owner = gridOwner[r][c];
+
+            // Center border: cells at the edge of the 3×3
+            const isCenterEdgeTop = r === 1 && c >= 1 && c <= 3;
+            const isCenterEdgeBottom = r === 3 && c >= 1 && c <= 3;
+            const isCenterEdgeLeft = c === 1 && r >= 1 && r <= 3;
+            const isCenterEdgeRight = c === 3 && r >= 1 && r <= 3;
 
             let cardState: 'default' | 'selected' | 'highlighted' | 'enemy' | 'center' = 'default';
             if (isHighlighted) cardState = 'highlighted';
@@ -96,6 +99,10 @@ export default function BattleBoard({
                   styles.cell,
                   { width: cellSize, height: cellSize },
                   cellType === 'center' && styles.cellCenter,
+                  isCenterEdgeTop && styles.centerBorderTop,
+                  isCenterEdgeBottom && styles.centerBorderBottom,
+                  isCenterEdgeLeft && styles.centerBorderLeft,
+                  isCenterEdgeRight && styles.centerBorderRight,
                   isValidTarget && styles.cellValidTarget,
                   isPending && styles.cellPending,
                   isHighlighted && styles.cellHighlighted,
@@ -105,17 +112,9 @@ export default function BattleBoard({
                 disabled={!canTap}
               >
                 {isPending && pendingPlacement ? (
-                  <CardComponent
-                    card={pendingPlacement.card}
-                    state="selected"
-                    size={cardSize > 50 ? 'md' : 'sm'}
-                  />
+                  <CardComponent card={pendingPlacement.card} state="selected" size={cardFits > 50 ? 'md' : 'sm'} />
                 ) : cell ? (
-                  <CardComponent
-                    card={cell}
-                    state={cardState}
-                    size={cardSize > 50 ? 'md' : 'sm'}
-                  />
+                  <CardComponent card={cell} state={cardState} size={cardFits > 50 ? 'md' : 'sm'} />
                 ) : isValidTarget ? (
                   <View style={styles.validDot} />
                 ) : null}
@@ -137,7 +136,7 @@ export default function BattleBoard({
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.sideBtn, styles.wildBtn, !wildReady && styles.sideBtnDisabled]}
+          style={[styles.sideBtn, styles.wildBtn, (!wildReady || !isPlayerTurn) && styles.sideBtnDisabled]}
           onPress={onWild}
           disabled={!wildReady || !isPlayerTurn}
           activeOpacity={0.7}
@@ -154,62 +153,76 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
   },
   board: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    backgroundColor: '#5C6B30',
+    backgroundColor: '#4A5A25',
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#3D4E1A',
+    borderColor: '#2D3A10',
     overflow: 'hidden',
   },
   cell: {
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent',
   },
   cellCenter: {
     backgroundColor: '#6B7C3A',
   },
+  // Gold border around center 3×3 edges
+  centerBorderTop: {
+    borderTopWidth: 2,
+    borderTopColor: '#B8962E',
+  },
+  centerBorderBottom: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#B8962E',
+  },
+  centerBorderLeft: {
+    borderLeftWidth: 2,
+    borderLeftColor: '#B8962E',
+  },
+  centerBorderRight: {
+    borderRightWidth: 2,
+    borderRightColor: '#B8962E',
+  },
   cellValidTarget: {
-    backgroundColor: 'rgba(100,200,100,0.25)',
-    borderColor: 'rgba(100,200,100,0.6)',
+    backgroundColor: 'rgba(80,200,80,0.22)',
   },
   cellPending: {
-    backgroundColor: 'rgba(255,215,0,0.15)',
+    backgroundColor: 'rgba(255,215,0,0.12)',
   },
   cellHighlighted: {
-    backgroundColor: 'rgba(180,100,255,0.25)',
+    backgroundColor: 'rgba(180,100,255,0.28)',
   },
   validDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(100,255,100,0.8)',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(80,255,80,0.85)',
   },
   sideButtons: {
-    marginLeft: 6,
+    marginLeft: 8,
     gap: 8,
   },
   sideBtn: {
-    backgroundColor: '#4A5A20',
-    paddingVertical: 10,
+    backgroundColor: '#3A4A18',
+    paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#6A8A30',
     alignItems: 'center',
-    minWidth: 46,
+    minWidth: 44,
   },
   sideBtnDisabled: {
-    opacity: 0.4,
+    opacity: 0.35,
   },
   wildBtn: {
-    backgroundColor: '#7A4A00',
+    backgroundColor: '#6A3E00',
     borderColor: '#CC8800',
   },
   sideBtnText: {

@@ -12,15 +12,13 @@ interface Props {
 
 export default function Card({ card, state = 'default', size = 'md' }: Props) {
   const isSmall = size === 'sm';
-  const cardW = isSmall ? 44 : 54;
-  const cardH = isSmall ? 54 : 66;
+  const cardW = isSmall ? 46 : 56;
+  const cardH = isSmall ? 58 : 68;
   const rankFontSize = isSmall ? 11 : 13;
-  const suitFontSize = isSmall ? 16 : 20;
+  const suitFontSize = isSmall ? 18 : 22;
 
   if (state === 'facedown') {
-    return (
-      <View style={[styles.card, { width: cardW, height: cardH }, styles.facedown]} />
-    );
+    return <View style={[styles.card, { width: cardW, height: cardH }, styles.facedown]} />;
   }
 
   if (card.isJoker) {
@@ -31,8 +29,8 @@ export default function Card({ card, state = 'default', size = 'md' }: Props) {
         state === 'selected' && styles.selected,
         state === 'highlighted' && styles.highlighted,
       ]}>
-        <Text style={[styles.jokerText, { fontSize: isSmall ? 9 : 11 }]}>JOKER</Text>
-        <Text style={{ fontSize: isSmall ? 16 : 20 }}>🃏</Text>
+        <Text style={[styles.jokerLabel, { fontSize: isSmall ? 8 : 10 }]}>JOKER</Text>
+        <Text style={{ fontSize: isSmall ? 18 : 22 }}>🃏</Text>
       </View>
     );
   }
@@ -71,11 +69,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
   },
   facedown: {
     backgroundColor: '#5555AA',
@@ -84,9 +77,6 @@ const styles = StyleSheet.create({
   selected: {
     borderColor: '#FFD700',
     borderWidth: 2.5,
-    shadowColor: '#FFD700',
-    shadowOpacity: 0.6,
-    shadowRadius: 4,
   },
   highlighted: {
     backgroundColor: '#EDD5FF',
@@ -111,7 +101,7 @@ const styles = StyleSheet.create({
   suitCenter: {
     fontWeight: '600',
   },
-  jokerText: {
+  jokerLabel: {
     fontWeight: '800',
     color: '#7700CC',
     position: 'absolute',

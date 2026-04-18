@@ -2,16 +2,15 @@ import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  Alert,
 } from 'react-native';
 import { useGameStore, PROTOTYPE_ENEMIES } from '../state/gameStore';
 import EnemyArea from '../components/EnemyArea';
 import PlayerArea from '../components/PlayerArea';
 import BattleBoard from '../components/BattleBoard';
 import HandResultBanner from '../components/HandResultBanner';
+import GameOverOverlay from '../components/GameOverOverlay';
 
 export default function BattleScreen() {
   const {
@@ -28,7 +27,6 @@ export default function BattleScreen() {
     currentRound,
     currentTurn,
     maxTurnsPerRound,
-    isPlayerTurn,
     wildCharge,
     wildReady,
     selectedCards,
@@ -46,12 +44,10 @@ export default function BattleScreen() {
 
   const enemyTurnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize battle on mount
   useEffect(() => {
     initBattle(PROTOTYPE_ENEMIES[0]);
   }, []);
 
-  // Trigger enemy turn after handResult is dismissed (or directly if enemy turn begins)
   useEffect(() => {
     if (phase === 'enemyTurn') {
       enemyTurnTimerRef.current = setTimeout(() => {
@@ -63,29 +59,9 @@ export default function BattleScreen() {
     };
   }, [phase]);
 
-  // Show victory/defeat alerts
-  useEffect(() => {
-    if (phase === 'victory') {
-      setTimeout(() => {
-        Alert.alert(
-          '⚔️ VICTORY!',
-          `You defeated ${currentEnemy.name}!`,
-          [{ text: 'Play Again', onPress: () => initBattle(PROTOTYPE_ENEMIES[0]) }]
-        );
-      }, 400);
-    } else if (phase === 'defeat') {
-      setTimeout(() => {
-        Alert.alert(
-          '💀 DEFEAT',
-          'You have been defeated...',
-          [{ text: 'Try Again', onPress: () => initBattle(PROTOTYPE_ENEMIES[0]) }]
-        );
-      }, 400);
-    }
-  }, [phase]);
-
   const enemy = { ...currentEnemy, currentHP: enemyHP, maxHP: enemyMaxHP, armor: enemyArmor };
   const activePlayerTurn = phase === 'playerTurn';
+  const isGameOver = phase === 'victory' || phase === 'defeat';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -119,10 +95,9 @@ export default function BattleScreen() {
             wildReady={wildReady}
             onCellPress={placeAtCell}
             onPass={playerPass}
-            onWild={() => {/* Phase 5 */}}
+            onWild={() => {}}
           />
 
-          {/* Hand result banner overlay */}
           {phase === 'handResult' && lastHandResult && (
             <HandResultBanner
               result={lastHandResult}
@@ -143,19 +118,28 @@ export default function BattleScreen() {
           onCardPress={toggleSelectCard}
         />
 
-        {/* Instructions strip */}
+        {/* Instruction strip */}
         {activePlayerTurn && (
           <View style={styles.instructionStrip}>
             {selectedCards.length === 0 && !pendingPlacement && (
               <Text style={styles.instructionText}>Tap a card to select it</Text>
             )}
-            {selectedCards.length === 1 && !pendingPlacement && (
-              <Text style={styles.instructionText}>Tap a board cell to place it, or select a 2nd card</Text>
+            {selectedCards.length >= 1 && !pendingPlacement && (
+              <Text style={styles.instructionText}>Tap a glowing cell, or select a 2nd card first</Text>
             )}
             {pendingPlacement && (
-              <Text style={styles.instructionText}>Select a card for the opposite side</Text>
+              <Text style={styles.instructionText}>Tap a card to place it on the opposite side</Text>
             )}
           </View>
+        )}
+
+        {/* Victory / Defeat overlay — no browser alert */}
+        {isGameOver && (
+          <GameOverOverlay
+            type={phase as 'victory' | 'defeat'}
+            enemyName={currentEnemy.name}
+            onPlayAgain={() => initBattle(PROTOTYPE_ENEMIES[0])}
+          />
         )}
       </View>
     </SafeAreaView>

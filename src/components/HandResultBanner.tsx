@@ -16,7 +16,7 @@ export default function HandResultBanner({ result, onDismiss }: Props) {
   const isPlayer = result.isPlayerHand;
 
   return (
-    <View style={styles.overlay} pointerEvents="none">
+    <View style={styles.overlay}>
       <View style={[styles.banner, isPlayer ? styles.playerBanner : styles.enemyBanner]}>
         <Text style={styles.handName}>{result.handDisplayName}</Text>
         {result.damage > 0 && (
@@ -35,25 +35,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100,
+    // pointerEvents: 'none' handled via prop on the View is deprecated —
+    // using position absolute overlay without blocking is fine here since
+    // it auto-dismisses and blocks input intentionally during display.
   },
   banner: {
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 10,
+    borderWidth: 2,
   },
   playerBanner: {
     backgroundColor: '#1A3A1A',
-    borderWidth: 2,
     borderColor: '#44AA44',
   },
   enemyBanner: {
     backgroundColor: '#3A1A1A',
-    borderWidth: 2,
     borderColor: '#AA4444',
   },
   handName: {
@@ -61,9 +59,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '900',
     letterSpacing: 2,
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
   },
   damage: {
     color: '#FFFFFF',
