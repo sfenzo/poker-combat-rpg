@@ -8,29 +8,31 @@ interface Props {
   card: CardType;
   state?: CardState;
   size?: 'sm' | 'md';
+  cardWidth?: number;
+  cardHeight?: number;
 }
 
-export default function Card({ card, state = 'default', size = 'md' }: Props) {
+export default function Card({ card, state = 'default', size = 'md', cardWidth, cardHeight }: Props) {
   const isSmall = size === 'sm';
-  const cardW = isSmall ? 46 : 56;
-  const cardH = isSmall ? 58 : 68;
-  const rankFontSize = isSmall ? 11 : 13;
-  const suitFontSize = isSmall ? 18 : 22;
+  const w = cardWidth ?? (isSmall ? 46 : 56);
+  const h = cardHeight ?? (isSmall ? 58 : 68);
+  const rankFontSize = Math.max(8, w * 0.22);
+  const suitFontSize = Math.max(12, w * 0.38);
 
   if (state === 'facedown') {
-    return <View style={[styles.card, { width: cardW, height: cardH }, styles.facedown]} />;
+    return <View style={[styles.card, { width: w, height: h }, styles.facedown]} />;
   }
 
   if (card.isJoker) {
     return (
       <View style={[
         styles.card,
-        { width: cardW, height: cardH },
+        { width: w, height: h },
         state === 'selected' && styles.selected,
         state === 'highlighted' && styles.highlighted,
       ]}>
-        <Text style={[styles.jokerLabel, { fontSize: isSmall ? 8 : 10 }]}>JOKER</Text>
-        <Text style={{ fontSize: isSmall ? 18 : 22 }}>🃏</Text>
+        <Text style={[styles.jokerLabel, { fontSize: Math.max(7, w * 0.16) }]}>JOKER</Text>
+        <Text style={{ fontSize: suitFontSize }}>🃏</Text>
       </View>
     );
   }
@@ -42,7 +44,7 @@ export default function Card({ card, state = 'default', size = 'md' }: Props) {
   return (
     <View style={[
       styles.card,
-      { width: cardW, height: cardH },
+      { width: w, height: h },
       state === 'selected' && styles.selected,
       state === 'highlighted' && styles.highlighted,
       state === 'enemy' && styles.enemyCard,

@@ -1,14 +1,16 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Enemy } from '../state/gameStore';
+import { Card } from '../constants/gameConstants';
+import CardComponent from './Card';
 
 interface Props {
   enemy: Enemy;
-  handCardCount: number;
+  enemyHand: Card[];
   isEnemyTurn: boolean;
 }
 
-export default function EnemyArea({ enemy, handCardCount, isEnemyTurn }: Props) {
+export default function EnemyArea({ enemy, enemyHand, isEnemyTurn }: Props) {
   const hpAnim = useRef(new Animated.Value(enemy.currentHP / enemy.maxHP)).current;
 
   useEffect(() => {
@@ -33,9 +35,10 @@ export default function EnemyArea({ enemy, handCardCount, isEnemyTurn }: Props) 
         </View>
         <Text style={styles.armor}>🛡️ {enemy.armor}</Text>
 
+        {/* Enemy hand shown face-up */}
         <View style={styles.handRow}>
-          {Array.from({ length: handCardCount }).map((_, i) => (
-            <View key={i} style={styles.facedownCard} />
+          {enemyHand.map(card => (
+            <CardComponent key={card.id} card={card} state="enemy" size="sm" />
           ))}
         </View>
       </View>
@@ -95,14 +98,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
     marginTop: 4,
-  },
-  facedownCard: {
-    width: 30,
-    height: 40,
-    backgroundColor: '#5555AA',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#3333AA',
+    flexWrap: 'wrap',
   },
   portrait: {
     width: 80,

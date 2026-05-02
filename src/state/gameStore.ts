@@ -22,6 +22,7 @@ export interface Enemy {
   handCardCount: number;
   damageTable: DamageTable;
   ability: string | null;
+  coinDrop: number;
 }
 
 export interface HandResult {
@@ -30,6 +31,7 @@ export interface HandResult {
   damage: number;
   cells: Array<[number, number]>;
   isPlayerHand: boolean;
+  isPass?: boolean;
 }
 
 export type GamePhase =
@@ -59,6 +61,7 @@ export interface BattleState {
   currentTurn: number;
   maxTurnsPerRound: number;
   isPlayerTurn: boolean;
+  turnWonOn: number;
 
   wildCharge: number;
   wildReady: boolean;
@@ -73,6 +76,7 @@ export interface BattleState {
 
 interface BattleActions {
   initBattle: (enemy: Enemy) => void;
+  setPlayerHP: (hp: number) => void;
   toggleSelectCard: (card: Card) => void;
   placeAtCell: (row: number, col: number) => void;
   playerPass: () => void;
@@ -116,9 +120,10 @@ export const PROTOTYPE_ENEMIES: Enemy[] = [
     maxHP: 5,
     currentHP: 5,
     armor: 0,
-    handCardCount: 4,
+    handCardCount: 2,
     damageTable: DEFAULT_DAMAGE_TABLE,
     ability: null,
+    coinDrop: 3,
   },
   {
     id: 'ulfr',
@@ -126,9 +131,10 @@ export const PROTOTYPE_ENEMIES: Enemy[] = [
     maxHP: 10,
     currentHP: 10,
     armor: 0,
-    handCardCount: 4,
+    handCardCount: 2,
     damageTable: DEFAULT_DAMAGE_TABLE,
     ability: null,
+    coinDrop: 5,
   },
   {
     id: 'mauler_bear',
@@ -136,15 +142,23 @@ export const PROTOTYPE_ENEMIES: Enemy[] = [
     maxHP: 8,
     currentHP: 8,
     armor: 0,
-    handCardCount: 4,
+    handCardCount: 2,
     damageTable: DEFAULT_DAMAGE_TABLE,
     ability: null,
+    coinDrop: 4,
   },
 ];
 
 function applyDamage(hp: number, armor: number, damage: number): { hp: number; armor: number } {
   const absorbed = Math.min(armor, damage);
   return { hp: Math.max(0, hp - (damage - absorbed)), armor: Math.max(0, armor - absorbed) };
+}
+
+function safeDrawCards(pile: Card[], n: number): { drawn: Card[]; remaining: Card[] } {
+  if (pile.length < n) {
+    pile = shuffleDeck([...pile, ...createDeck()]);
+  }
+  return drawCards(pile, n);
 }
 
 export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
@@ -163,6 +177,7 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
   currentTurn: 1,
   maxTurnsPerRound: 10,
   isPlayerTurn: true,
+  turnWonOn: 0,
   wildCharge: 0,
   wildReady: false,
   selectedCards: [],
@@ -174,6 +189,7 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
   initBattle: (enemy) => {
     const deck = shuffleDeck(createDeck());
     const { grid, owner, remaining } = dealCenterCards(deck);
+    // Player draws 4, enemy draws handCardCount (2) initially
     const { drawn: playerHand, remaining: r2 } = drawCards(remaining, 4);
     const { drawn: enemyHand, remaining: drawPile } = drawCards(r2, enemy.handCardCount);
 
@@ -192,6 +208,7 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
       currentRound: 1,
       currentTurn: 1,
       isPlayerTurn: true,
+      turnWonOn: 0,
       wildCharge: 0,
       wildReady: false,
       selectedCards: [],
@@ -202,19 +219,22 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
     });
   },
 
+  setPlayerHP: (hp) => {
+    set({ playerHP: hp });
+  },
+
   toggleSelectCard: (card) => {
     const { phase, selectedCards, pendingPlacement } = get();
     if (phase !== 'playerTurn') return;
 
-    // If we have a pending placement (first card already placed), select the second card
     if (pendingPlacement) {
-      // Select a card to place at the opposite cell
-      const { grid, gridOwner, drawPile, playerHand, currentEnemy } = get();
+      const { grid, gridOwner, playerHand, currentEnemy, drawPile } = get();
       const opp = getOppositeCell(pendingPlacement.row, pendingPlacement.col);
       if (!opp) return;
       const [or, oc] = opp;
 
-      // Place both cards
+      if (grid[or][oc] !== null) return; // opposite cell occupied
+
       const newGrid = grid.map(r => [...r]);
       const newOwner = gridOwner.map(r => [...r]);
       newGrid[pendingPlacement.row][pendingPlacement.col] = pendingPlacement.card;
@@ -222,30 +242,19 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
       newGrid[or][oc] = card;
       newOwner[or][oc] = 'player';
 
-      // Evaluate hand
       const cells = getHandCells(pendingPlacement.row, pendingPlacement.col, or, oc);
       const fiveCards = cells.map(([r, c]) => newGrid[r][c]).filter(Boolean) as Card[];
-
       if (fiveCards.length !== 5) return;
 
       const result = evaluateHand(fiveCards, currentEnemy.damageTable);
-
       if (!isValidPlay(result)) {
-        // Invalid — undo pending placement, reset
         set({ pendingPlacement: null, selectedCards: [] });
         return;
       }
 
-      // Valid — remove both cards from hand
       const newHand = playerHand.filter(c => c.id !== pendingPlacement.card.id && c.id !== card.id);
-
-      // Apply damage
-      const { hp: newEnemyHP, armor: newEnemyArmor } = applyDamage(
-        get().enemyHP, get().enemyArmor, result.damage
-      );
-
+      const { hp: newEnemyHP, armor: newEnemyArmor } = applyDamage(get().enemyHP, get().enemyArmor, result.damage);
       const newWildCharge = Math.min(100, get().wildCharge + 25);
-
       const handResult: HandResult = {
         handName: result.handName,
         handDisplayName: result.handDisplayName,
@@ -256,61 +265,52 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
 
       if (newEnemyHP <= 0) {
         set({
-          grid: newGrid,
-          gridOwner: newOwner,
-          playerHand: newHand,
-          enemyHP: 0,
-          enemyArmor: newEnemyArmor,
-          wildCharge: newWildCharge,
-          wildReady: newWildCharge >= 100,
-          selectedCards: [],
-          pendingPlacement: null,
+          grid: newGrid, gridOwner: newOwner, playerHand: newHand,
+          enemyHP: 0, enemyArmor: newEnemyArmor,
+          wildCharge: newWildCharge, wildReady: newWildCharge >= 100,
+          selectedCards: [], pendingPlacement: null,
           lastHandResult: handResult,
+          turnWonOn: get().currentTurn,
           phase: 'victory',
         });
         return;
       }
 
+      // Draw 2 more cards for enemy (2→4) before their turn
+      const { drawn: extraEnemyCards, remaining: newDraw } = safeDrawCards(drawPile, get().currentEnemy.handCardCount);
+
       set({
-        grid: newGrid,
-        gridOwner: newOwner,
-        playerHand: newHand,
-        enemyHP: newEnemyHP,
-        enemyArmor: newEnemyArmor,
-        wildCharge: newWildCharge,
-        wildReady: newWildCharge >= 100,
-        selectedCards: [],
-        pendingPlacement: null,
+        grid: newGrid, gridOwner: newOwner, playerHand: newHand,
+        enemyHP: newEnemyHP, enemyArmor: newEnemyArmor,
+        enemyHand: [...get().enemyHand, ...extraEnemyCards],
+        drawPile: newDraw,
+        wildCharge: newWildCharge, wildReady: newWildCharge >= 100,
+        selectedCards: [], pendingPlacement: null,
         lastHandResult: handResult,
         phase: 'handResult',
       });
       return;
     }
 
-    // No pending placement — selecting cards for placement
     const alreadySelected = selectedCards.find(c => c.id === card.id);
     if (alreadySelected) {
       set({ selectedCards: selectedCards.filter(c => c.id !== card.id) });
     } else if (selectedCards.length < 2) {
       set({ selectedCards: [...selectedCards, card] });
     } else {
-      // Replace the first selected card
       set({ selectedCards: [selectedCards[1], card] });
     }
   },
 
   placeAtCell: (row, col) => {
-    const { phase, grid, gridOwner, selectedCards, pendingPlacement, playerHand, currentEnemy } = get();
+    const { phase, grid, gridOwner, selectedCards, pendingPlacement, playerHand, currentEnemy, drawPile } = get();
     if (phase !== 'playerTurn') return;
-
-    if (grid[row][col] !== null) return; // cell occupied
+    if (grid[row][col] !== null) return;
 
     if (pendingPlacement) {
-      // Second placement — must be the opposite cell
       const opp = getOppositeCell(pendingPlacement.row, pendingPlacement.col);
       if (!opp || opp[0] !== row || opp[1] !== col) return;
 
-      // Place the pending card + whichever card is selected second
       const secondCard = selectedCards[0];
       if (!secondCard) return;
 
@@ -323,7 +323,6 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
 
       const cells = getHandCells(pendingPlacement.row, pendingPlacement.col, row, col);
       const fiveCards = cells.map(([r, c]) => newGrid[r][c]).filter(Boolean) as Card[];
-
       if (fiveCards.length !== 5) { set({ pendingPlacement: null, selectedCards: [] }); return; }
 
       const result = evaluateHand(fiveCards, currentEnemy.damageTable);
@@ -332,23 +331,41 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
       const newHand = playerHand.filter(c => c.id !== pendingPlacement.card.id && c.id !== secondCard.id);
       const { hp: newEnemyHP, armor: newEnemyArmor } = applyDamage(get().enemyHP, get().enemyArmor, result.damage);
       const newWildCharge = Math.min(100, get().wildCharge + 25);
-      const handResult: HandResult = { handName: result.handName, handDisplayName: result.handDisplayName, damage: result.damage, cells, isPlayerHand: true };
+      const handResult: HandResult = {
+        handName: result.handName, handDisplayName: result.handDisplayName,
+        damage: result.damage, cells, isPlayerHand: true,
+      };
 
       if (newEnemyHP <= 0) {
-        set({ grid: newGrid, gridOwner: newOwner, playerHand: newHand, enemyHP: 0, enemyArmor: newEnemyArmor, wildCharge: newWildCharge, wildReady: newWildCharge >= 100, selectedCards: [], pendingPlacement: null, lastHandResult: handResult, phase: 'victory' });
+        set({
+          grid: newGrid, gridOwner: newOwner, playerHand: newHand,
+          enemyHP: 0, enemyArmor: newEnemyArmor,
+          wildCharge: newWildCharge, wildReady: newWildCharge >= 100,
+          selectedCards: [], pendingPlacement: null,
+          lastHandResult: handResult,
+          turnWonOn: get().currentTurn,
+          phase: 'victory',
+        });
         return;
       }
 
-      set({ grid: newGrid, gridOwner: newOwner, playerHand: newHand, enemyHP: newEnemyHP, enemyArmor: newEnemyArmor, wildCharge: newWildCharge, wildReady: newWildCharge >= 100, selectedCards: [], pendingPlacement: null, lastHandResult: handResult, phase: 'handResult' });
+      const { drawn: extraEnemyCards, remaining: newDraw } = safeDrawCards(drawPile, get().currentEnemy.handCardCount);
+
+      set({
+        grid: newGrid, gridOwner: newOwner, playerHand: newHand,
+        enemyHP: newEnemyHP, enemyArmor: newEnemyArmor,
+        enemyHand: [...get().enemyHand, ...extraEnemyCards],
+        drawPile: newDraw,
+        wildCharge: newWildCharge, wildReady: newWildCharge >= 100,
+        selectedCards: [], pendingPlacement: null,
+        lastHandResult: handResult,
+        phase: 'handResult',
+      });
       return;
     }
 
-    // First placement — need 1 selected card
     if (selectedCards.length === 0) return;
-
     const card = selectedCards[0];
-
-    // Validate: row,col must be a valid placement endpoint
     const opp = getOppositeCell(row, col);
     if (!opp) return;
 
@@ -359,57 +376,79 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
   },
 
   playerPass: () => {
-    const { phase, drawPile } = get();
+    const { phase, drawPile, currentEnemy } = get();
     if (phase !== 'playerTurn') return;
 
-    const deck = drawPile.length >= 4 ? drawPile : shuffleDeck([...drawPile, ...createDeck()]);
-    const { drawn, remaining } = drawCards(deck, 4);
+    // Player discards hand and draws 4 fresh cards
+    const { drawn: newPlayerHand, remaining: r1 } = safeDrawCards(drawPile, 4);
+    // Enemy draws handCardCount more cards (2→4) for their turn
+    const { drawn: extraEnemyCards, remaining: newDraw } = safeDrawCards(r1, currentEnemy.handCardCount);
 
-    // Player passes → enemy gets their turn (same turn number; increments after enemy)
+    const passResult: HandResult = {
+      handName: 'PASS',
+      handDisplayName: 'PASS',
+      damage: 0,
+      cells: [],
+      isPlayerHand: true,
+      isPass: true,
+    };
+
     set({
-      playerHand: drawn,
-      drawPile: remaining,
+      playerHand: newPlayerHand,
+      enemyHand: [...get().enemyHand, ...extraEnemyCards],
+      drawPile: newDraw,
       selectedCards: [],
       pendingPlacement: null,
-      phase: 'enemyTurn',
+      lastHandResult: passResult,
+      phase: 'handResult',
     });
   },
 
   dismissHandResult: () => {
-    const { currentTurn, maxTurnsPerRound, lastHandResult } = get();
+    const { currentTurn, maxTurnsPerRound, lastHandResult, drawPile, currentEnemy } = get();
 
     if (lastHandResult?.isPlayerHand) {
-      // Player played → enemy takes their turn (same turn number)
-      set({ phase: 'enemyTurn', lastHandResult: null });
+      // Player played/passed → enemy's turn
+      const nextTurn = currentTurn + 1;
+      set({ phase: 'enemyTurn', currentTurn: nextTurn, lastHandResult: null });
     } else {
-      // Enemy played → turn ends, player goes next
+      // Enemy played/passed → player's turn, draw 2 for player
       const nextTurn = currentTurn + 1;
       if (nextTurn > maxTurnsPerRound) {
+        set({ lastHandResult: null });
         get().startNewRound();
       } else {
-        set({ phase: 'playerTurn', currentTurn: nextTurn, lastHandResult: null });
+        const { drawn: extraPlayerCards, remaining: newDraw } = safeDrawCards(drawPile, 2);
+        set({
+          playerHand: [...get().playerHand, ...extraPlayerCards],
+          drawPile: newDraw,
+          phase: 'playerTurn',
+          currentTurn: nextTurn,
+          lastHandResult: null,
+        });
       }
     }
   },
 
   runEnemyTurn: () => {
-    const { grid, enemyHand, currentEnemy, drawPile, currentTurn, maxTurnsPerRound } = get();
+    const { grid, enemyHand, currentEnemy, drawPile } = get();
     const move = findBestAiMove(grid, enemyHand, currentEnemy.damageTable);
 
     if (!move) {
-      // Enemy must pass — redraw hand
-      const deck = drawPile.length >= currentEnemy.handCardCount
-        ? drawPile
-        : shuffleDeck([...drawPile, ...createDeck()]);
-      const { drawn, remaining } = drawCards(deck, currentEnemy.handCardCount);
-
-      const nextTurn = currentTurn + 1;
-      if (nextTurn > maxTurnsPerRound) {
-        set({ enemyHand: drawn, drawPile: remaining });
-        get().startNewRound();
-      } else {
-        set({ enemyHand: drawn, drawPile: remaining, phase: 'playerTurn', currentTurn: nextTurn });
-      }
+      // Enemy passes — discard all cards
+      const passResult: HandResult = {
+        handName: 'PASS',
+        handDisplayName: 'PASS',
+        damage: 0,
+        cells: [],
+        isPlayerHand: false,
+        isPass: true,
+      };
+      set({
+        enemyHand: [],
+        lastHandResult: passResult,
+        phase: 'handResult',
+      });
       return;
     }
 
@@ -422,7 +461,6 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
 
     const newEnemyHand = enemyHand.filter(c => c.id !== move.card1.id && c.id !== move.card2.id);
     const cells = getHandCells(move.pos1[0], move.pos1[1], move.pos2[0], move.pos2[1]);
-
     const { hp: newPlayerHP, armor: newPlayerArmor } = applyDamage(get().playerHP, get().playerArmor, move.damage);
 
     const handResult: HandResult = {
@@ -434,27 +472,28 @@ export const useGameStore = create<BattleState & BattleActions>((set, get) => ({
     };
 
     if (newPlayerHP <= 0) {
-      set({ grid: newGrid, gridOwner: newOwner, enemyHand: newEnemyHand, playerHP: 0, playerArmor: newPlayerArmor, lastHandResult: handResult, phase: 'defeat' });
+      set({
+        grid: newGrid, gridOwner: newOwner,
+        enemyHand: newEnemyHand,
+        playerHP: 0, playerArmor: newPlayerArmor,
+        lastHandResult: handResult,
+        phase: 'defeat',
+      });
       return;
     }
 
     set({
-      grid: newGrid,
-      gridOwner: newOwner,
+      grid: newGrid, gridOwner: newOwner,
       enemyHand: newEnemyHand,
-      playerHP: newPlayerHP,
-      playerArmor: newPlayerArmor,
+      playerHP: newPlayerHP, playerArmor: newPlayerArmor,
       lastHandResult: handResult,
       phase: 'handResult',
     });
   },
 
   startNewRound: () => {
-    const { currentRound, currentEnemy, drawPile, playerHand } = get();
-    let deck = drawPile.length < 9 + 4 + currentEnemy.handCardCount
-      ? shuffleDeck(createDeck())
-      : drawPile;
-
+    const { currentRound, currentEnemy } = get();
+    const deck = shuffleDeck(createDeck());
     const { grid, owner, remaining } = dealCenterCards(deck);
     const { drawn: newPlayerHand, remaining: r2 } = drawCards(remaining, 4);
     const { drawn: newEnemyHand, remaining: newDraw } = drawCards(r2, currentEnemy.handCardCount);

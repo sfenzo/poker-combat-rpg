@@ -7,7 +7,6 @@ interface Props {
   playerHP: number;
   playerMaxHP: number;
   playerArmor: number;
-  wildCharge: number;
   hand: Card[];
   selectedCards: Card[];
   isPlayerTurn: boolean;
@@ -15,14 +14,8 @@ interface Props {
 }
 
 export default function PlayerArea({
-  playerHP,
-  playerMaxHP,
-  playerArmor,
-  wildCharge,
-  hand,
-  selectedCards,
-  isPlayerTurn,
-  onCardPress,
+  playerHP, playerMaxHP, playerArmor,
+  hand, selectedCards, isPlayerTurn, onCardPress,
 }: Props) {
   const hpAnim = useRef(new Animated.Value(playerHP / playerMaxHP)).current;
 
@@ -44,10 +37,6 @@ export default function PlayerArea({
       <View style={styles.portrait}>
         <Text style={styles.portraitEmoji}>🧙‍♀️</Text>
         <Text style={styles.label}>PLAYER</Text>
-        <View style={styles.wildBar}>
-          <View style={[styles.wildFill, { height: `${wildCharge}%` }]} />
-        </View>
-        <Text style={styles.wildLabel}>WILD</Text>
       </View>
 
       <View style={styles.statsCol}>
@@ -94,7 +83,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#33AAFF',
   },
   portrait: {
-    width: 70,
+    width: 60,
     alignItems: 'center',
     marginRight: 8,
   },
@@ -106,26 +95,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 0.5,
-  },
-  wildBar: {
-    width: 10,
-    height: 30,
-    backgroundColor: '#333',
-    borderRadius: 3,
-    marginTop: 4,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  wildFill: {
-    backgroundColor: '#FF8800',
-    width: '100%',
-    borderRadius: 3,
-  },
-  wildLabel: {
-    color: '#FF8800',
-    fontSize: 8,
-    fontWeight: '700',
-    marginTop: 1,
   },
   statsCol: {
     flex: 1,
